@@ -1,0 +1,26 @@
+# DevEco/HarmonyOS 构建产物
+build/
+entry/build/
+oh_modules/
+entry/oh_modules/
+.hvigor/
+.idea/
+*.iml
+
+# 本地签名和敏感配置
+*.p12
+*.p7b
+*.cer
+*.keystore
+local.properties
+
+# 日志、临时文件和测试输出
+*.log
+*.hprof
+coverage/
+tmp/
+.DS_Store
+
+# 文档站生成物和本地索引
+public/
+.codegraph/

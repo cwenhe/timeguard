@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "每周指定时段禁止指定应用打开"
+    },
+    {
+      "name": "entryability_desc",
+      "value": "管理每周时段应用限制"
+    },
+    {
+      "name": "app_name",
+      "value": "自控钟"
+    }
+  ]
+}

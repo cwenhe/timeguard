@@ -1,0 +1,9 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "HarmonyOS 6 自控钟应用限制",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hypium": "1.0.19",
+    "@ohos/hamock": "1.0.0"
+  }
+}
