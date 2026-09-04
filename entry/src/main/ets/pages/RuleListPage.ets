@@ -15,9 +15,9 @@ struct RuleListPage {
   private readonly guardService: ScreenTimeGuardService = ScreenTimeGuardService.getInstance();
 
   /**
-   * 页面显示时从本地读取规则，并按系统真实策略校准启用状态。
+   * 页面显示（含从编辑页返回）时从本地读取规则，并按系统真实策略校准启用状态。
    */
-  public aboutToAppear(): void {
+  public onPageShow(): void {
     void this.loadRules();
   }
 
@@ -74,10 +74,11 @@ struct RuleListPage {
         await this.guardService.deactivateRule(updated);
       }
       await this.repository.saveRule(updated);
-      await this.loadRules();
+      this.replaceRule(updated);
       this.showStatus('idle', enabled ? `“${rule.name}”已启用` : `“${rule.name}”已停用`);
     } catch (error) {
       this.showStatus('error', `${enabled ? '启用' : '停用'}失败：${this.guardService.describeError(error as BusinessError)}`);
+      this.rules = await this.repository.loadRules();
     } finally {
       this.busy = false;
     }
@@ -111,7 +112,7 @@ struct RuleListPage {
         await this.guardService.deactivateRule(rule);
       }
       await this.repository.deleteRule(rule.id);
-      await this.loadRules();
+      this.rules = this.rules.filter((item: GuardRule): boolean => item.id !== rule.id);
       this.showStatus('idle', `已删除“${rule.name}”`);
     } catch (error) {
       this.showStatus('error', `删除失败：${this.guardService.describeError(error as BusinessError)}`);
@@ -135,6 +136,17 @@ struct RuleListPage {
   private showStatus(kind: string, message: string): void {
     this.statusText = message;
     this.statusColor = kind === 'error' ? '#B42318' : kind === 'success' ? '#15803D' : '#64748B';
+  }
+
+  private replaceRule(updated: GuardRule): void {
+    const next: GuardRule[] = this.rules.slice();
+    const index: number = next.findIndex((item: GuardRule): boolean => item.id === updated.id);
+    if (index >= 0) {
+      next.splice(index, 1, updated);
+    } else {
+      next.push(updated);
+    }
+    this.rules = next;
   }
 
   build() {

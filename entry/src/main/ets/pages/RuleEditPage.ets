@@ -99,7 +99,7 @@ struct RuleEditPage {
       weekdays: this.weekdays.slice(),
       startTime: this.startTime,
       endTime: this.endTime,
-      enabled: true
+      enabled: this.existingRule !== null ? this.existingRule.enabled : true
     };
     const errorMessage: string = validateRule(candidate);
     if (errorMessage.length > 0) {
@@ -108,10 +108,12 @@ struct RuleEditPage {
     }
     this.busy = true;
     try {
-      if (this.existingRule !== null && this.existingRule.enabled && this.existingRule.appToken !== candidate.appToken) {
-        await this.guardService.deactivateRule(this.existingRule);
+      if (candidate.enabled) {
+        if (this.existingRule !== null && this.existingRule.enabled && this.existingRule.appToken !== candidate.appToken) {
+          await this.guardService.deactivateRule(this.existingRule);
+        }
+        await this.guardService.applyRule(candidate);
       }
-      await this.guardService.applyRule(candidate);
       await this.repository.saveRule(candidate);
       router.back();
     } catch (error) {
