@@ -1,0 +1,257 @@
+import { router } from '@kit.ArkUI';
+import { BusinessError } from '@kit.BasicServicesKit';
+import {
+  GuardRule,
+  normalizeWeekdays,
+  validateRule,
+  WEEKDAY_NAMES
+} from '../model/GuardRule';
+import { ScreenTimeGuardService } from '../service/ScreenTimeGuardService';
+import { GuardRuleRepository } from '../storage/GuardRuleRepository';
+
+const WEEKDAY_OPTIONS: number[] = [1, 2, 3, 4, 5, 6, 7];
+
+@Entry
+@Component
+struct RuleEditPage {
+  @State private ruleId: string = '';
+  @State private ruleName: string = '';
+  @State private appToken: string = '';
+  @State private appText: string = '尚未选择应用';
+  @State private weekdays: number[] = [1, 2, 3, 4, 5, 6, 7];
+  @State private startTime: string = '19:00';
+  @State private endTime: string = '21:00';
+  @State private busy: boolean = false;
+  @State private statusText: string = '';
+  @State private statusColor: string = '#64748B';
+  private existingRule: GuardRule | null = null;
+  private readonly repository: GuardRuleRepository = GuardRuleRepository.getInstance();
+  private readonly guardService: ScreenTimeGuardService = ScreenTimeGuardService.getInstance();
+
+  /**
+   * 页面出现时根据路由参数加载已有规则或进入新增状态。
+   */
+  public aboutToAppear(): void {
+    const params = router.getParams() as Record<string, string>;
+    const id: string = params !== null && params !== undefined && params['ruleId'] !== undefined
+      ? params['ruleId']
+      : '';
+    if (id.length === 0) {
+      return;
+    }
+    this.ruleId = id;
+    void this.loadRule(id);
+  }
+
+  private async loadRule(id: string): Promise<void> {
+    const rules: GuardRule[] = await this.repository.loadRules();
+    const rule: GuardRule | undefined = rules.find((item: GuardRule): boolean => item.id === id);
+    if (rule === undefined) {
+      this.showStatus('error', '没有找到这条规则');
+      return;
+    }
+    this.existingRule = rule;
+    this.ruleName = rule.name;
+    this.appToken = rule.appToken;
+    this.appText = '已选择应用（编辑时重新打开选择页可查看）';
+    this.weekdays = rule.weekdays.slice();
+    this.startTime = rule.startTime;
+    this.endTime = rule.endTime;
+  }
+
+  private async chooseApp(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    this.busy = true;
+    try {
+      const token: string = await this.guardService.pickTargetApp(this.appToken);
+      this.appToken = token;
+      this.appText = '已选择 1 个应用';
+      this.showStatus('idle', '应用已选择');
+    } catch (error) {
+      this.showStatus('error', `选择应用失败：${this.guardService.describeError(error as BusinessError)}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private toggleWeekday(day: number): void {
+    const index: number = this.weekdays.indexOf(day);
+    const next: number[] = this.weekdays.slice();
+    if (index >= 0) {
+      next.splice(index, 1);
+    } else {
+      next.push(day);
+    }
+    this.weekdays = normalizeWeekdays(next);
+  }
+
+  private async saveRule(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    const id: string = this.ruleId.length > 0 ? this.ruleId : this.createId();
+    const candidate: GuardRule = {
+      id,
+      name: this.ruleName,
+      appToken: this.appToken,
+      weekdays: this.weekdays.slice(),
+      startTime: this.startTime,
+      endTime: this.endTime,
+      enabled: true
+    };
+    const errorMessage: string = validateRule(candidate);
+    if (errorMessage.length > 0) {
+      this.showStatus('error', errorMessage);
+      return;
+    }
+    this.busy = true;
+    try {
+      if (this.existingRule !== null && this.existingRule.enabled && this.existingRule.appToken !== candidate.appToken) {
+        await this.guardService.deactivateRule(this.existingRule);
+      }
+      await this.guardService.applyRule(candidate);
+      await this.repository.saveRule(candidate);
+      router.back();
+    } catch (error) {
+      this.showStatus('error', `保存失败：${this.guardService.describeError(error as BusinessError)}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private createId(): string {
+    return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  }
+
+  private timeToDate(value: string): Date {
+    return new Date(2026, 0, 1, Number(value.slice(0, 2)), Number(value.slice(3, 5)));
+  }
+
+  private dateToTime(value: Date): string {
+    const hour: number = value.getHours();
+    const minute: number = value.getMinutes();
+    return `${hour < 10 ? '0' : ''}${hour}:${minute < 10 ? '0' : ''}${minute}`;
+  }
+
+  private showStatus(kind: string, message: string): void {
+    this.statusText = message;
+    this.statusColor = kind === 'error' ? '#B42318' : '#15803D';
+  }
+
+  build() {
+    Column({ space: 18 }) {
+      Row() {
+        Text(this.ruleId.length > 0 ? '编辑规则' : '添加规则')
+          .fontSize(26)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#0F172A')
+        Blank()
+        Text('返回')
+          .fontSize(15)
+          .fontColor('#1D4ED8')
+          .onClick(() => {
+            router.back();
+          })
+      }
+      .width('100%')
+
+      Scroll() {
+        Column({ space: 16 }) {
+          TextInput({ text: this.ruleName, placeholder: '规则名，例如：抖音' })
+            .height(48)
+            .onChange((value: string) => {
+              this.ruleName = value;
+            })
+
+          Text('生效星期')
+            .fontSize(14)
+            .fontColor('#334155')
+          Flex({ wrap: FlexWrap.Wrap, space: { main: 10, cross: 10 } }) {
+            ForEach(WEEKDAY_OPTIONS, (day: number) => {
+              Column({ space: 4 }) {
+                Text(WEEKDAY_NAMES[day - 1])
+                  .fontSize(13)
+                  .fontColor(this.weekdays.indexOf(day) >= 0 ? '#1D4ED8' : '#64748B')
+                Toggle({
+                  type: ToggleType.Checkbox,
+                  isOn: this.weekdays.indexOf(day) >= 0
+                })
+                  .onChange(() => {
+                    this.toggleWeekday(day);
+                  })
+              }
+              .width(72)
+              .padding(8)
+              .borderRadius(10)
+              .backgroundColor(this.weekdays.indexOf(day) >= 0 ? '#E8F0FF' : '#FFFFFF')
+            }, (day: number) => day.toString())
+          }
+          .width('100%')
+
+          Text('开始时间')
+            .fontSize(14)
+            .fontColor('#334155')
+          TimePicker({ selected: this.timeToDate(this.startTime) })
+            .useMilitaryTime(true)
+            .height(120)
+            .onChange((value: TimePickerResult) => {
+              this.startTime = this.dateToTime(new Date(2026, 0, 1, value.hour, value.minute));
+            })
+
+          Text('结束时间')
+            .fontSize(14)
+            .fontColor('#334155')
+          TimePicker({ selected: this.timeToDate(this.endTime) })
+            .useMilitaryTime(true)
+            .height(120)
+            .onChange((value: TimePickerResult) => {
+              this.endTime = this.dateToTime(new Date(2026, 0, 1, value.hour, value.minute));
+            })
+
+          Button(this.appToken.length > 0 ? '重新选择要限制的应用' : '选择要限制的应用')
+            .width('100%')
+            .height(48)
+            .fontSize(15)
+            .fontColor('#1D4ED8')
+            .backgroundColor('#E8F0FF')
+            .enabled(!this.busy)
+            .onClick(() => {
+              void this.chooseApp();
+            })
+
+          Text(this.appText)
+            .fontSize(13)
+            .fontColor('#64748B')
+
+          if (this.statusText.length > 0) {
+            Text(this.statusText)
+              .fontSize(13)
+              .fontColor(this.statusColor)
+              .width('100%')
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .width('100%')
+      }
+      .layoutWeight(1)
+      .width('100%')
+
+      Button('保存并启用')
+        .width('100%')
+        .height(50)
+        .fontSize(16)
+        .fontColor('#FFFFFF')
+        .backgroundColor('#1D4ED8')
+        .enabled(!this.busy)
+        .onClick(() => {
+          void this.saveRule();
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 22, right: 22, top: 28, bottom: 22 })
+    .backgroundColor('#F5F7FB')
+  }
+}
