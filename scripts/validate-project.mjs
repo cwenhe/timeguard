@@ -35,6 +35,7 @@ function validateProject() {
   const buildConfig = parseConfig('build-profile.json5');
   const moduleConfig = parseConfig('entry/src/main/module.json5');
   const pagesConfig = parseConfig('entry/src/main/resources/base/profile/main_pages.json');
+  const syscapConfig = parseConfig('entry/src/main/syscap.json');
 
   assert.equal(appConfig.app.bundleName, 'com.cwenhe.timeguard');
   assert.equal(buildConfig.app.products[0].targetSdkVersion, '6.1.0(23)');
@@ -43,6 +44,7 @@ function validateProject() {
     (item) => item.name === 'ohos.permission.MANAGE_SCREEN_TIME_GUARD'
   ));
   assert.deepEqual(pagesConfig.src, ['pages/RuleListPage', 'pages/RuleEditPage']);
+  assert.ok(syscapConfig.development.addedSysCaps.includes('SystemCapability.ScreenTimeGuard.GuardService'));
 
   const model = readProjectFile('entry/src/main/ets/model/GuardRule.ets');
   const service = readProjectFile('entry/src/main/ets/service/ScreenTimeGuardService.ets');
