@@ -177,7 +177,10 @@ export class ScreenTimeGuardService {
     } catch (error) {
       const businessError: BusinessError = error as BusinessError;
       if (businessError.code !== ERROR_STRATEGY_NOT_FOUND && businessError.code !== ERROR_STRATEGY_NOT_STARTED) {
-        throw error;
+        const detail: string = businessError.message !== undefined && businessError.message.length > 0
+          ? businessError.message
+          : `错误码 ${businessError.code}`;
+        throw new Error(`守护策略停止失败：${detail}`);
       }
     }
   }

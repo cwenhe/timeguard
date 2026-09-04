@@ -1,4 +1,4 @@
-import { router } from '@kit.ArkUI';
+import { LengthMetrics, router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import {
   GuardRule,
@@ -170,7 +170,7 @@ struct RuleEditPage {
           Text('生效星期')
             .fontSize(14)
             .fontColor('#334155')
-          Flex({ wrap: FlexWrap.Wrap, space: { main: 10, cross: 10 } }) {
+          Flex({ wrap: FlexWrap.Wrap, space: { main: LengthMetrics.vp(10), cross: LengthMetrics.vp(10) } }) {
             ForEach(WEEKDAY_OPTIONS, (day: number) => {
               Column({ space: 4 }) {
                 Text(WEEKDAY_NAMES[day - 1])
