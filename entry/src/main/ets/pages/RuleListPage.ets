@@ -1,0 +1,238 @@
+import { router } from '@kit.ArkUI';
+import { BusinessError } from '@kit.BasicServicesKit';
+import { formatRuleTime, formatWeekdays, GuardRule } from '../model/GuardRule';
+import { ScreenTimeGuardService } from '../service/ScreenTimeGuardService';
+import { GuardRuleRepository } from '../storage/GuardRuleRepository';
+
+@Entry
+@Component
+struct RuleListPage {
+  @State private rules: GuardRule[] = [];
+  @State private busy: boolean = false;
+  @State private statusText: string = '正在同步规则…';
+  @State private statusColor: string = '#64748B';
+  private readonly repository: GuardRuleRepository = GuardRuleRepository.getInstance();
+  private readonly guardService: ScreenTimeGuardService = ScreenTimeGuardService.getInstance();
+
+  /**
+   * 页面显示时从本地读取规则，并按系统真实策略校准启用状态。
+   */
+  public aboutToAppear(): void {
+    void this.loadRules();
+  }
+
+  private async loadRules(): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    this.busy = true;
+    try {
+      const localRules: GuardRule[] = await this.repository.loadRules();
+      let activeNames: string[] = [];
+      try {
+        activeNames = await this.guardService.activeStrategyNames();
+      } catch (error) {
+        this.showStatus('error', `读取系统策略失败：${this.guardService.describeError(error as BusinessError)}`);
+      }
+      for (const rule of localRules) {
+        const active: boolean = activeNames.indexOf(`rule_${rule.id}`) >= 0;
+        if (rule.enabled !== active) {
+          rule.enabled = active;
+          await this.repository.saveRule(rule);
+        }
+      }
+      this.rules = localRules;
+      this.showStatus('idle', localRules.length === 0 ? '还没有规则，点击下方“添加规则”开始' : '规则已同步');
+    } catch (error) {
+      this.showStatus('error', `读取本地规则失败：${String(error)}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private openCreatePage(): void {
+    void router.pushUrl({ url: 'pages/RuleEditPage' });
+  }
+
+  private openEditPage(ruleId: string): void {
+    void router.pushUrl({
+      url: 'pages/RuleEditPage',
+      params: { ruleId }
+    });
+  }
+
+  private async toggleRule(rule: GuardRule, enabled: boolean): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    this.busy = true;
+    const updated: GuardRule = this.copyRule(rule, enabled);
+    try {
+      if (enabled) {
+        await this.guardService.applyRule(updated);
+      } else {
+        await this.guardService.deactivateRule(updated);
+      }
+      await this.repository.saveRule(updated);
+      await this.loadRules();
+      this.showStatus('idle', enabled ? `“${rule.name}”已启用` : `“${rule.name}”已停用`);
+    } catch (error) {
+      this.showStatus('error', `${enabled ? '启用' : '停用'}失败：${this.guardService.describeError(error as BusinessError)}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private confirmDelete(rule: GuardRule): void {
+    AlertDialog.show({
+      title: '删除规则',
+      message: `确定删除“${rule.name}”？删除后系统限制立即解除。`,
+      primaryButton: {
+        value: '删除',
+        action: () => {
+          void this.deleteRule(rule);
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  private async deleteRule(rule: GuardRule): Promise<void> {
+    if (this.busy) {
+      return;
+    }
+    this.busy = true;
+    try {
+      if (rule.enabled) {
+        await this.guardService.deactivateRule(rule);
+      }
+      await this.repository.deleteRule(rule.id);
+      await this.loadRules();
+      this.showStatus('idle', `已删除“${rule.name}”`);
+    } catch (error) {
+      this.showStatus('error', `删除失败：${this.guardService.describeError(error as BusinessError)}`);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private copyRule(rule: GuardRule, enabled: boolean): GuardRule {
+    return {
+      id: rule.id,
+      name: rule.name,
+      appToken: rule.appToken,
+      weekdays: rule.weekdays.slice(),
+      startTime: rule.startTime,
+      endTime: rule.endTime,
+      enabled
+    };
+  }
+
+  private showStatus(kind: string, message: string): void {
+    this.statusText = message;
+    this.statusColor = kind === 'error' ? '#B42318' : kind === 'success' ? '#15803D' : '#64748B';
+  }
+
+  build() {
+    Column({ space: 16 }) {
+      Column({ space: 8 }) {
+        Text('自控钟')
+          .fontSize(30)
+          .fontWeight(FontWeight.Bold)
+          .fontColor('#0F172A')
+        Text('每周指定时段禁止指定应用打开')
+          .fontSize(14)
+          .fontColor('#475569')
+      }
+      .alignItems(HorizontalAlign.Start)
+      .width('100%')
+
+      Text(this.statusText)
+        .fontSize(14)
+        .fontColor(this.statusColor)
+        .width('100%')
+
+      List({ space: 12 }) {
+        ForEach(this.rules, (rule: GuardRule) => {
+          ListItem() {
+            Column({ space: 10 }) {
+              Row() {
+                Column({ space: 4 }) {
+                  Text(rule.name)
+                    .fontSize(17)
+                    .fontWeight(FontWeight.Medium)
+                    .fontColor('#0F172A')
+                  Text(`${formatWeekdays(rule.weekdays)} ${formatRuleTime(rule)}`)
+                    .fontSize(13)
+                    .fontColor('#64748B')
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+
+                Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
+                  .onChange((value: boolean) => {
+                    void this.toggleRule(rule, value);
+                  })
+              }
+              .width('100%')
+
+              Row({ space: 12 }) {
+                Button('编辑')
+                  .fontSize(14)
+                  .backgroundColor('#1D4ED8')
+                  .onClick(() => {
+                    this.openEditPage(rule.id);
+                  })
+                Button('删除')
+                  .fontSize(14)
+                  .backgroundColor('#E11D48')
+                  .onClick(() => {
+                    this.confirmDelete(rule);
+                  })
+              }
+              .width('100%')
+            }
+            .alignItems(HorizontalAlign.Start)
+            .padding(16)
+            .backgroundColor('#FFFFFF')
+            .borderRadius(16)
+            .width('100%')
+          }
+        }, (rule: GuardRule) => rule.id)
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .scrollBar(BarState.Auto)
+
+      Button('添加规则')
+        .width('100%')
+        .height(50)
+        .fontSize(16)
+        .fontColor('#FFFFFF')
+        .backgroundColor('#1D4ED8')
+        .enabled(!this.busy)
+        .onClick(() => {
+          this.openCreatePage();
+        })
+
+      Button('重新同步')
+        .width('100%')
+        .height(44)
+        .fontSize(14)
+        .fontColor('#1D4ED8')
+        .backgroundColor('#E8F0FF')
+        .enabled(!this.busy)
+        .onClick(() => {
+          void this.loadRules();
+        })
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 22, right: 22, top: 30, bottom: 22 })
+    .backgroundColor('#F5F7FB')
+  }
+}
