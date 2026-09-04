@@ -137,6 +137,38 @@ struct RuleEditPage {
     return `${hour < 10 ? '0' : ''}${hour}:${minute < 10 ? '0' : ''}${minute}`;
   }
 
+  /**
+   * 打开开始时间选择弹窗，用户确认后才更新开始时间。
+   */
+  private editStartTime(): void {
+    this.openTimeDialog(this.timeToDate(this.startTime), (value: TimePickerResult): void => {
+      this.startTime = this.dateToTime(new Date(2026, 0, 1, value.hour, value.minute));
+    });
+  }
+
+  /**
+   * 打开结束时间选择弹窗，用户确认后才更新结束时间。
+   */
+  private editEndTime(): void {
+    this.openTimeDialog(this.timeToDate(this.endTime), (value: TimePickerResult): void => {
+      this.endTime = this.dateToTime(new Date(2026, 0, 1, value.hour, value.minute));
+    });
+  }
+
+  /**
+   * 弹出系统 24 小时制时间选择弹窗，只有 onAccept 回调才提交选择。
+   *
+   * @param selected 弹窗初始时间。
+   * @param onAccept 用户点确定后执行的回调。
+   */
+  private openTimeDialog(selected: Date, onAccept: (value: TimePickerResult) => void): void {
+    this.getUIContext().showTimePickerDialog({
+      selected,
+      useMilitaryTime: true,
+      onAccept
+    });
+  }
+
   private showStatus(kind: string, message: string): void {
     this.statusText = message;
     this.statusColor = kind === 'error' ? '#B42318' : '#15803D';
@@ -192,25 +224,51 @@ struct RuleEditPage {
           }
           .width('100%')
 
-          Text('开始时间')
-            .fontSize(14)
-            .fontColor('#334155')
-          TimePicker({ selected: this.timeToDate(this.startTime) })
-            .useMilitaryTime(true)
-            .height(120)
-            .onChange((value: TimePickerResult) => {
-              this.startTime = this.dateToTime(new Date(2026, 0, 1, value.hour, value.minute));
-            })
+          Row() {
+            Text('开始时间')
+              .fontSize(15)
+              .fontColor('#334155')
+            Blank()
+            Text(this.startTime)
+              .fontSize(22)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#0F172A')
+            Text('›')
+              .fontSize(24)
+              .fontColor('#94A3B8')
+              .margin({ left: 8 })
+          }
+          .width('100%')
+          .height(56)
+          .padding({ left: 16, right: 16 })
+          .borderRadius(12)
+          .backgroundColor('#FFFFFF')
+          .onClick(() => {
+            this.editStartTime();
+          })
 
-          Text('结束时间')
-            .fontSize(14)
-            .fontColor('#334155')
-          TimePicker({ selected: this.timeToDate(this.endTime) })
-            .useMilitaryTime(true)
-            .height(120)
-            .onChange((value: TimePickerResult) => {
-              this.endTime = this.dateToTime(new Date(2026, 0, 1, value.hour, value.minute));
-            })
+          Row() {
+            Text('结束时间')
+              .fontSize(15)
+              .fontColor('#334155')
+            Blank()
+            Text(this.endTime)
+              .fontSize(22)
+              .fontWeight(FontWeight.Medium)
+              .fontColor('#0F172A')
+            Text('›')
+              .fontSize(24)
+              .fontColor('#94A3B8')
+              .margin({ left: 8 })
+          }
+          .width('100%')
+          .height(56)
+          .padding({ left: 16, right: 16 })
+          .borderRadius(12)
+          .backgroundColor('#FFFFFF')
+          .onClick(() => {
+            this.editEndTime();
+          })
 
           Button(this.appToken.length > 0 ? '重新选择要限制的应用' : '选择要限制的应用')
             .width('100%')
