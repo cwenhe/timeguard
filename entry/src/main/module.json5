@@ -13,7 +13,14 @@
     "pages": "$profile:main_pages",
     "requestPermissions": [
       {
-        "name": "ohos.permission.MANAGE_SCREEN_TIME_GUARD"
+        "name": "ohos.permission.MANAGE_SCREEN_TIME_GUARD",
+        "reason": "$string:screen_time_guard_permission_reason",
+        "usedScene": {
+          "abilities": [
+            "EntryAbility"
+          ],
+          "when": "inuse"
+        }
       }
     ],
     "abilities": [

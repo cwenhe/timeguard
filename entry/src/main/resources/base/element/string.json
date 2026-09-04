@@ -11,6 +11,10 @@
     {
       "name": "app_name",
       "value": "自控钟"
+    },
+    {
+      "name": "screen_time_guard_permission_reason",
+      "value": "用于按用户设置的每周时段限制指定应用打开，并在时段结束后自动解除限制。"
     }
   ]
 }
