@@ -2,6 +2,8 @@ import { LengthMetrics, router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import {
   GuardRule,
+  isRuleActiveAt,
+  isRuleScheduleActiveAt,
   normalizeWeekdays,
   validateRule,
   WEEKDAY_NAMES
@@ -21,9 +23,11 @@ struct RuleEditPage {
   @State private weekdays: number[] = [1, 2, 3, 4, 5, 6, 7];
   @State private startTime: string = '19:00';
   @State private endTime: string = '21:00';
+  @State private now: Date = new Date();
   @State private busy: boolean = false;
   @State private statusText: string = '';
   @State private statusColor: string = '#64748B';
+  private timerId: number = -1;
   private existingRule: GuardRule | null = null;
   private readonly repository: GuardRuleRepository = GuardRuleRepository.getInstance();
   private readonly guardService: ScreenTimeGuardService = ScreenTimeGuardService.getInstance();
@@ -37,10 +41,57 @@ struct RuleEditPage {
       ? params['ruleId']
       : '';
     if (id.length === 0) {
+      this.startTick();
       return;
     }
     this.ruleId = id;
+    this.startTick();
     void this.loadRule(id);
+  }
+
+  /**
+   * 页面销毁时停止生效状态刷新定时器。
+   */
+  public aboutToDisappear(): void {
+    this.stopTick();
+  }
+
+  /**
+   * 启动定时刷新当前时间，让编辑页能自动进入/退出生效锁定状态。
+   */
+  private startTick(): void {
+    this.stopTick();
+    this.timerId = setInterval(() => {
+      this.now = new Date();
+    }, 30000);
+  }
+
+  /**
+   * 停止当前生效状态刷新定时器。
+   */
+  private stopTick(): void {
+    if (this.timerId >= 0) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
+  }
+
+  /**
+   * 判断当前正在编辑的规则是否正处于生效锁定状态。
+   *
+   * @returns 生效中返回 true。
+   */
+  private isEditingActive(): boolean {
+    return this.existingRule !== null && isRuleActiveAt(this.existingRule, this.now);
+  }
+
+  /**
+   * 用最新系统时间判断正在编辑的规则是否已进入生效状态。
+   *
+   * @returns 生效中返回 true。
+   */
+  private isEditingActiveNow(): boolean {
+    return this.existingRule !== null && isRuleActiveAt(this.existingRule, new Date());
   }
 
   private async loadRule(id: string): Promise<void> {
@@ -91,6 +142,10 @@ struct RuleEditPage {
     if (this.busy) {
       return;
     }
+    if (this.isEditingActiveNow()) {
+      this.showStatus('error', '该规则正在生效，本时段内不能修改，结束后自动解除');
+      return;
+    }
     const id: string = this.ruleId.length > 0 ? this.ruleId : this.createId();
     const candidate: GuardRule = {
       id,
@@ -106,6 +161,43 @@ struct RuleEditPage {
       this.showStatus('error', errorMessage);
       return;
     }
+    if (candidate.enabled && isRuleScheduleActiveAt(candidate, this.now) &&
+      (this.existingRule === null || !isRuleActiveAt(this.existingRule, this.now))) {
+      this.confirmImmediateSave(candidate);
+      return;
+    }
+    await this.doSaveRule(candidate);
+  }
+
+  /**
+   * 弹出“规则保存后立即生效且本时段内不能解除”的确认框。
+   *
+   * @param candidate 待保存规则。
+   */
+  private confirmImmediateSave(candidate: GuardRule): void {
+    AlertDialog.show({
+      title: '规则将立即生效',
+      message: '当前时间已在规则生效时段内，保存后本时段内不能停用或修改。是否继续？',
+      primaryButton: {
+        value: '仍要保存',
+        action: () => {
+          void this.doSaveRule(candidate);
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  /**
+   * 执行真正的本地保存与系统策略同步。
+   *
+   * @param candidate 待保存规则。
+   */
+  private async doSaveRule(candidate: GuardRule): Promise<void> {
     this.busy = true;
     try {
       if (candidate.enabled) {
@@ -193,6 +285,13 @@ struct RuleEditPage {
 
       Scroll() {
         Column({ space: 16 }) {
+          if (this.isEditingActive()) {
+            Text('该规则正在生效：本时段内不能修改，结束后自动解除')
+              .fontSize(13)
+              .fontColor('#B45309')
+              .width('100%')
+          }
+
           TextInput({ text: this.ruleName, placeholder: '规则名，例如：抖音' })
             .height(48)
             .onChange((value: string) => {
@@ -304,7 +403,7 @@ struct RuleEditPage {
         .fontSize(16)
         .fontColor('#FFFFFF')
         .backgroundColor('#1D4ED8')
-        .enabled(!this.busy)
+        .enabled(!this.busy && !this.isEditingActive())
         .onClick(() => {
           void this.saveRule();
         })

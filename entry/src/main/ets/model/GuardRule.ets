@@ -100,6 +100,37 @@ export function validateRule(rule: GuardRule): string {
 }
 
 /**
+ * 判断规则的时间窗在指定时刻是否命中（忽略启用状态）。
+ *
+ * 生效区间为左闭右开：开始分钟命中，结束分钟不命中。
+ *
+ * @param rule 规则。
+ * @param now 当前时间。
+ * @returns 当前星期和时间落在规则时间窗内时返回 true。
+ */
+export function isRuleScheduleActiveAt(rule: GuardRule, now: Date): boolean {
+  const weekday: number = now.getDay() === 0 ? 7 : now.getDay();
+  if (normalizeWeekdays(rule.weekdays).indexOf(weekday) === -1) {
+    return false;
+  }
+  const currentMinutes: number = now.getHours() * 60 + now.getMinutes();
+  return currentMinutes >= toTimeMinutes(rule.startTime) && currentMinutes < toTimeMinutes(rule.endTime);
+}
+
+/**
+ * 判断规则当前是否处于生效锁定状态。
+ *
+ * 仅当规则已启用且时间窗命中时才返回 true，用于锁定停用、删除和编辑入口。
+ *
+ * @param rule 规则。
+ * @param now 当前时间。
+ * @returns 规则正在生效时返回 true。
+ */
+export function isRuleActiveAt(rule: GuardRule, now: Date): boolean {
+  return rule.enabled && isRuleScheduleActiveAt(rule, now);
+}
+
+/**
  * 生成规则卡片的生效日展示文本。
  *
  * @param days 星期数组。

@@ -1,6 +1,6 @@
 import { router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { formatRuleTime, formatWeekdays, GuardRule } from '../model/GuardRule';
+import { formatRuleTime, formatWeekdays, GuardRule, isRuleActiveAt, isRuleScheduleActiveAt } from '../model/GuardRule';
 import { ScreenTimeGuardService } from '../service/ScreenTimeGuardService';
 import { GuardRuleRepository } from '../storage/GuardRuleRepository';
 
@@ -8,9 +8,11 @@ import { GuardRuleRepository } from '../storage/GuardRuleRepository';
 @Component
 struct RuleListPage {
   @State private rules: GuardRule[] = [];
+  @State private now: Date = new Date();
   @State private busy: boolean = false;
   @State private statusText: string = '正在同步规则…';
   @State private statusColor: string = '#64748B';
+  private timerId: number = -1;
   private readonly repository: GuardRuleRepository = GuardRuleRepository.getInstance();
   private readonly guardService: ScreenTimeGuardService = ScreenTimeGuardService.getInstance();
 
@@ -18,7 +20,45 @@ struct RuleListPage {
    * 页面显示（含从编辑页返回）时从本地读取规则，并按系统真实策略校准启用状态。
    */
   public onPageShow(): void {
+    this.startTick();
     void this.loadRules();
+  }
+
+  /**
+   * 页面隐藏时停止生效状态刷新定时器。
+   */
+  public onPageHide(): void {
+    this.stopTick();
+  }
+
+  /**
+   * 启动定时刷新当前时间，让“限制生效中”状态能随规则时间窗自动变化。
+   */
+  private startTick(): void {
+    this.stopTick();
+    this.timerId = setInterval(() => {
+      this.now = new Date();
+    }, 30000);
+  }
+
+  /**
+   * 停止当前生效状态刷新定时器。
+   */
+  private stopTick(): void {
+    if (this.timerId >= 0) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
+  }
+
+  /**
+   * 用最新系统时间判断规则是否正在生效，供操作前做最终拦截。
+   *
+   * @param rule 规则。
+   * @returns 生效中返回 true。
+   */
+  private isRuleActiveNow(rule: GuardRule): boolean {
+    return isRuleActiveAt(rule, new Date());
   }
 
   private async loadRules(): Promise<void> {
@@ -55,16 +95,68 @@ struct RuleListPage {
   }
 
   private openEditPage(ruleId: string): void {
+    const target: GuardRule | undefined = this.rules.find((item: GuardRule): boolean => item.id === ruleId);
+    if (target !== undefined && this.isRuleActiveNow(target)) {
+      this.showStatus('error', `“${target.name}”正在生效，本时段内不能编辑`);
+      return;
+    }
     void router.pushUrl({
       url: 'pages/RuleEditPage',
       params: { ruleId }
     });
   }
 
+  /**
+   * 统一处理启用/停用入口：生效中禁止停用，立即生效的启用先弹确认。
+   *
+   * @param rule 规则。
+   * @param enabled 目标启用状态。
+   */
   private async toggleRule(rule: GuardRule, enabled: boolean): Promise<void> {
     if (this.busy) {
       return;
     }
+    if (!enabled && this.isRuleActiveNow(rule)) {
+      this.showStatus('error', `“${rule.name}”正在生效，本时段内不能停用`);
+      return;
+    }
+    if (enabled && isRuleScheduleActiveAt(rule, this.now)) {
+      this.confirmEnableNow(rule);
+      return;
+    }
+    await this.doSetRuleEnabled(rule, enabled);
+  }
+
+  /**
+   * 弹出“规则立即生效且本时段内不能解除”的确认框。
+   *
+   * @param rule 规则。
+   */
+  private confirmEnableNow(rule: GuardRule): void {
+    AlertDialog.show({
+      title: '规则将立即生效',
+      message: `“${rule.name}”当前时间已在生效时段内，启用后本时段内不能停用或修改。是否继续？`,
+      primaryButton: {
+        value: '仍要启用',
+        action: () => {
+          void this.doSetRuleEnabled(rule, true);
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        action: () => {
+        }
+      }
+    });
+  }
+
+  /**
+   * 执行真正的启用/停用系统策略与本地保存。
+   *
+   * @param rule 规则。
+   * @param enabled 目标启用状态。
+   */
+  private async doSetRuleEnabled(rule: GuardRule, enabled: boolean): Promise<void> {
     this.busy = true;
     const updated: GuardRule = this.copyRule(rule, enabled);
     try {
@@ -85,6 +177,10 @@ struct RuleListPage {
   }
 
   private confirmDelete(rule: GuardRule): void {
+    if (this.isRuleActiveNow(rule)) {
+      this.showStatus('error', `“${rule.name}”正在生效，本时段内不能删除`);
+      return;
+    }
     AlertDialog.show({
       title: '删除规则',
       message: `确定删除“${rule.name}”？删除后系统限制立即解除。`,
@@ -186,22 +282,31 @@ struct RuleListPage {
                 .layoutWeight(1)
 
                 Toggle({ type: ToggleType.Switch, isOn: rule.enabled })
+                  .enabled(!this.busy && !isRuleActiveAt(rule, this.now))
                   .onChange((value: boolean) => {
                     void this.toggleRule(rule, value);
                   })
               }
               .width('100%')
 
+              if (isRuleActiveAt(rule, this.now)) {
+                Text('限制生效中：本时段内不能停用或修改')
+                  .fontSize(12)
+                  .fontColor('#B45309')
+              }
+
               Row({ space: 12 }) {
                 Button('编辑')
                   .fontSize(14)
                   .backgroundColor('#1D4ED8')
+                  .enabled(!isRuleActiveAt(rule, this.now))
                   .onClick(() => {
                     this.openEditPage(rule.id);
                   })
                 Button('删除')
                   .fontSize(14)
                   .backgroundColor('#E11D48')
+                  .enabled(!isRuleActiveAt(rule, this.now))
                   .onClick(() => {
                     this.confirmDelete(rule);
                   })

@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
-import { buildStrategyName, GuardRule } from '../model/GuardRule';
+import { buildStrategyName, GuardRule, isRuleScheduleActiveAt } from '../model/GuardRule';
 
 const ERROR_STRATEGY_NOT_FOUND: number = 1019000006;
 const ERROR_STRATEGY_NOT_STARTED: number = 1019000008;
@@ -81,6 +81,9 @@ export class ScreenTimeGuardService {
    * @param rule 规则。
    */
   public async deactivateRule(rule: GuardRule): Promise<void> {
+    if (isRuleScheduleActiveAt(rule, new Date())) {
+      throw new Error('该规则正在生效，本时段内不能停用或删除');
+    }
     const appInfo: guardService.AppInfo = { appTokens: [rule.appToken] };
     try {
       await guardService.releaseAppsRestriction(appInfo, guardService.RestrictionType.BLOCKLIST_TYPE);

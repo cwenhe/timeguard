@@ -92,6 +92,33 @@ function validateRule(rule) {
 }
 
 /**
+ * 判断规则时间窗在指定时刻是否命中（忽略启用状态）。
+ *
+ * @param {object} rule 规则。
+ * @param {Date} now 当前时间。
+ * @returns {boolean} 时间窗命中时返回 true。
+ */
+function isRuleScheduleActiveAt(rule, now) {
+  const weekday = now.getDay() === 0 ? 7 : now.getDay();
+  if (normalizeWeekdays(rule.weekdays ?? []).indexOf(weekday) === -1) {
+    return false;
+  }
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  return currentMinutes >= toMinutes(rule.startTime) && currentMinutes < toMinutes(rule.endTime);
+}
+
+/**
+ * 判断规则是否处于生效锁定状态。
+ *
+ * @param {object} rule 规则。
+ * @param {Date} now 当前时间。
+ * @returns {boolean} 规则正在生效时返回 true。
+ */
+function isRuleActiveAt(rule, now) {
+  return Boolean(rule.enabled) && isRuleScheduleActiveAt(rule, now);
+}
+
+/**
  * 生成星期集合的展示文本。
  *
  * @param {number[]} days 星期数组。
@@ -141,6 +168,27 @@ assert.equal(isTimeText('00:00'), true);
 assert.equal(isTimeText('23:59'), true);
 assert.equal(isTimeText('24:00'), false);
 assert.equal(isTimeText('9:00'), false);
+const timeRule = {
+  id: 'r-lock',
+  name: '同花顺',
+  appToken: 'a',
+  weekdays: [1],
+  startTime: '19:00',
+  endTime: '21:00',
+  enabled: true
+};
+assert.equal(isRuleActiveAt(timeRule, new Date(2026, 8, 7, 18, 59)), false);
+assert.equal(isRuleActiveAt(timeRule, new Date(2026, 8, 7, 19, 0)), true);
+assert.equal(isRuleActiveAt(timeRule, new Date(2026, 8, 7, 20, 59)), true);
+assert.equal(isRuleActiveAt(timeRule, new Date(2026, 8, 7, 21, 0)), false);
+assert.equal(isRuleActiveAt(timeRule, new Date(2026, 8, 8, 20, 0)), false);
+assert.equal(isRuleScheduleActiveAt(timeRule, new Date(2026, 8, 8, 20, 0)), false);
+const disabledTimeRule = { ...timeRule, enabled: false };
+assert.equal(isRuleScheduleActiveAt(disabledTimeRule, new Date(2026, 8, 7, 20, 0)), true);
+assert.equal(isRuleActiveAt(disabledTimeRule, new Date(2026, 8, 7, 20, 0)), false);
+const sundayRule = { ...timeRule, weekdays: [7] };
+assert.equal(isRuleActiveAt(sundayRule, new Date(2026, 8, 6, 20, 0)), true);
+assert.equal(isRuleActiveAt(sundayRule, new Date(2026, 8, 7, 0, 0)), false);
 assert.equal(validateRule({ id: 'r1', name: '  ', appToken: 'a', weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请填写规则名');
 assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: '', weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请选择要限制的应用');
 assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: 'a', weekdays: [], startTime: '19:00', endTime: '21:00', enabled: true }), '请至少选择一个生效日');
@@ -149,4 +197,4 @@ assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: 'a', weekdays: [
 assert.equal(formatRuleTime({ startTime: '19:00', endTime: '21:00' }), '19:00 – 21:00');
 assert.equal(buildStrategyName('abc'), 'rule_abc');
 
-console.log('guard rule tests passed (17 cases)');
+console.log('guard rule tests passed (27 cases)');
