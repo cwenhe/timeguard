@@ -7,7 +7,7 @@
     </linearGradient>
   </defs>
 
-  <rect width="1024" height="1024" rx="230" fill="url(#timeguardBg)"/>
+  <rect width="1024" height="1024" fill="url(#timeguardBg)"/>
 
   <circle cx="512" cy="512" r="392" fill="none" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="10"/>
   <circle cx="512" cy="512" r="348" fill="none" stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="20"/>
