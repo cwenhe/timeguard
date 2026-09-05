@@ -55,8 +55,13 @@ function validateProject() {
   assert.match(model, /validateRule/);
   assert.match(model, /formatWeekdays/);
   assert.match(model, /buildStrategyName/);
+  assert.match(model, /normalizeAppTokens/);
+  assert.match(model, /sameAppTokenSet/);
+  assert.match(model, /toGuardRule/);
+  assert.match(model, /formatAppCount/);
   assert.match(service, /requestUserAuth/);
   assert.match(service, /startAppPicker/);
+  assert.match(service, /pickTargetApps/);
   assert.match(service, /addGuardStrategy/);
   assert.match(service, /updateGuardStrategy/);
   assert.match(service, /startGuardStrategy/);
@@ -64,7 +69,11 @@ function validateProject() {
   assert.match(service, /removeGuardStrategy/);
   assert.match(service, /releaseAppsRestriction/);
   assert.match(repository, /preferences\.getPreferences/);
+  assert.match(repository, /toGuardRule/);
   assert.match(listPage, /Toggle\(\{ type: ToggleType\.Switch/);
+  assert.match(listPage, /formatAppCount/);
+  assert.match(editPage, /pickTargetApps/);
+  assert.match(editPage, /sameAppTokenSet/);
   assert.match(editPage, /TimePicker/);
 
   console.log('project validation passed');

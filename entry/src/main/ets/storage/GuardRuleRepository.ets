@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { GuardRule } from '../model/GuardRule';
+import { GuardRule, StoredGuardRule, toGuardRule } from '../model/GuardRule';
 
 const PREFERENCES_NAME: string = 'timeguard_preferences';
 const RULES_KEY: string = 'rules_v1';
@@ -43,7 +43,8 @@ export class GuardRuleRepository {
       const store: preferences.Preferences = await this.ensureStore();
       const raw: preferences.ValueType = await store.get(RULES_KEY, '[]');
       const text: string = typeof raw === 'string' ? raw : '[]';
-      return JSON.parse(text) as GuardRule[];
+      const storedRules: StoredGuardRule[] = JSON.parse(text) as StoredGuardRule[];
+      return storedRules.map((stored: StoredGuardRule): GuardRule => toGuardRule(stored));
     } catch (error) {
       const message: string = this.describeError(error as BusinessError);
       console.error(`自控钟读取本地规则失败：${message}`);

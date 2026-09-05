@@ -3,6 +3,25 @@ import assert from 'node:assert/strict';
 const WEEKDAY_NAMES = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
 /**
+ * 归一化应用 token 数组：过滤空串并去重，保持首次出现顺序。
+ *
+ * @param {string[]} values 原始 token 数组。
+ * @returns {string[]} 去重且不含空串的 token 数组。
+ */
+function normalizeAppTokens(values) {
+  const seen = [];
+  const result = [];
+  for (const value of values) {
+    const text = String(value ?? '').trim();
+    if (text.length > 0 && seen.indexOf(text) === -1) {
+      seen.push(text);
+      result.push(text);
+    }
+  }
+  return result;
+}
+
+/**
  * 归一化星期数组：过滤非法值、去重并升序排序。
  *
  * @param {number[]} values 原始星期数组。
@@ -42,6 +61,50 @@ function sameSet(a, b) {
 }
 
 /**
+ * 判断两组应用 token 是否等价，忽略顺序与重复项。
+ *
+ * @param {string[]} a 左侧 token 数组。
+ * @param {string[]} b 右侧 token 数组。
+ * @returns {boolean} 归一化且排序后完全一致时返回 true。
+ */
+function sameAppTokenSet(a, b) {
+  const left = normalizeAppTokens(a).sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+  const right = normalizeAppTokens(b).sort((x, y) => (x < y ? -1 : x > y ? 1 : 0));
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i += 1) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 把本地存储的历史结构转换为当前规则结构。
+ *
+ * @param {object} stored 本地存储的规则，可含 appToken 或 appTokens。
+ * @returns {object} 始终包含 appTokens 数组的规则。
+ */
+function toGuardRule(stored) {
+  const storedTokens = Array.isArray(stored.appTokens) ? stored.appTokens : [];
+  const legacyToken = typeof stored.appToken === 'string' ? stored.appToken : '';
+  const appTokens = normalizeAppTokens(storedTokens.length > 0
+    ? storedTokens
+    : (legacyToken.length > 0 ? [legacyToken] : []));
+  return {
+    id: stored.id,
+    name: stored.name,
+    appTokens,
+    weekdays: (stored.weekdays ?? []).slice(),
+    startTime: stored.startTime,
+    endTime: stored.endTime,
+    enabled: stored.enabled
+  };
+}
+
+/**
  * 判断文本是否为 HH:mm 格式。
  *
  * @param {string} value 时间文本。
@@ -75,7 +138,7 @@ function validateRule(rule) {
   if (name.length > 30) {
     return '规则名不能超过 30 个字符';
   }
-  if (typeof rule.appToken !== 'string' || rule.appToken.length === 0) {
+  if (normalizeAppTokens(Array.isArray(rule.appTokens) ? rule.appTokens : []).length === 0) {
     return '请选择要限制的应用';
   }
   const weekdays = normalizeWeekdays(rule.weekdays ?? []);
@@ -89,6 +152,17 @@ function validateRule(rule) {
     return '结束时间必须晚于开始时间';
   }
   return '';
+}
+
+/**
+ * 生成规则卡片的应用数量展示文本。
+ *
+ * @param {string[]} appTokens 应用 token 数组。
+ * @returns {string} 未选择时提示尚未选择，否则显示受限应用个数。
+ */
+function formatAppCount(appTokens) {
+  const count = normalizeAppTokens(appTokens).length;
+  return count > 0 ? `限制 ${count} 个应用` : '尚未选择应用';
 }
 
 /**
@@ -160,6 +234,33 @@ function buildStrategyName(ruleId) {
 
 assert.equal(normalizeWeekdays([3, 1, 3, 2]).join(','), '1,2,3');
 assert.equal(normalizeWeekdays([0, 8, -1]).join(','), '');
+assert.deepEqual(normalizeAppTokens(['b', 'a', 'b', '', ' a ']), ['b', 'a']);
+assert.equal(sameAppTokenSet(['a', 'b'], ['b', 'a']), true);
+assert.equal(sameAppTokenSet(['a', 'b'], ['a']), false);
+assert.equal(sameAppTokenSet(['a', 'b', 'a'], ['b', 'a']), true);
+const migratedRule = toGuardRule({
+  id: 'r-old',
+  name: '抖音',
+  appToken: 'old-token',
+  weekdays: [1, 2],
+  startTime: '19:00',
+  endTime: '21:00',
+  enabled: true
+});
+assert.deepEqual(migratedRule.appTokens, ['old-token']);
+assert.equal(migratedRule.name, '抖音');
+assert.equal(migratedRule.weekdays.join(','), '1,2');
+assert.equal(toGuardRule({
+  id: 'r-new',
+  name: '双应用',
+  appTokens: ['x', 'x', 'y'],
+  weekdays: [1],
+  startTime: '19:00',
+  endTime: '21:00',
+  enabled: false
+}).appTokens.join(','), 'x,y');
+assert.equal(formatAppCount([]), '尚未选择应用');
+assert.equal(formatAppCount(['a', 'b']), '限制 2 个应用');
 assert.equal(formatWeekdays([1, 2, 3, 4, 5, 6, 7]), '每天');
 assert.equal(formatWeekdays([1, 2, 3, 4, 5]), '周一至周五');
 assert.equal(formatWeekdays([6, 7]), '周末');
@@ -171,7 +272,7 @@ assert.equal(isTimeText('9:00'), false);
 const timeRule = {
   id: 'r-lock',
   name: '同花顺',
-  appToken: 'a',
+  appTokens: ['a'],
   weekdays: [1],
   startTime: '19:00',
   endTime: '21:00',
@@ -189,12 +290,13 @@ assert.equal(isRuleActiveAt(disabledTimeRule, new Date(2026, 8, 7, 20, 0)), fals
 const sundayRule = { ...timeRule, weekdays: [7] };
 assert.equal(isRuleActiveAt(sundayRule, new Date(2026, 8, 6, 20, 0)), true);
 assert.equal(isRuleActiveAt(sundayRule, new Date(2026, 8, 7, 0, 0)), false);
-assert.equal(validateRule({ id: 'r1', name: '  ', appToken: 'a', weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请填写规则名');
-assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: '', weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请选择要限制的应用');
-assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: 'a', weekdays: [], startTime: '19:00', endTime: '21:00', enabled: true }), '请至少选择一个生效日');
-assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: 'a', weekdays: [1], startTime: '21:00', endTime: '19:00', enabled: true }), '结束时间必须晚于开始时间');
-assert.equal(validateRule({ id: 'r1', name: '抖音', appToken: 'a', weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '');
+assert.equal(validateRule({ id: 'r1', name: '  ', appTokens: ['a'], weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请填写规则名');
+assert.equal(validateRule({ id: 'r1', name: '抖音', appTokens: [], weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请选择要限制的应用');
+assert.equal(validateRule({ id: 'r1', name: '抖音', appTokens: ['', ' '], weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '请选择要限制的应用');
+assert.equal(validateRule({ id: 'r1', name: '抖音', appTokens: ['a', 'b'], weekdays: [], startTime: '19:00', endTime: '21:00', enabled: true }), '请至少选择一个生效日');
+assert.equal(validateRule({ id: 'r1', name: '抖音', appTokens: ['a', 'b'], weekdays: [1], startTime: '21:00', endTime: '19:00', enabled: true }), '结束时间必须晚于开始时间');
+assert.equal(validateRule({ id: 'r1', name: '抖音', appTokens: ['a', 'b'], weekdays: [1], startTime: '19:00', endTime: '21:00', enabled: true }), '');
 assert.equal(formatRuleTime({ startTime: '19:00', endTime: '21:00' }), '19:00 – 21:00');
 assert.equal(buildStrategyName('abc'), 'rule_abc');
 
-console.log('guard rule tests passed (27 cases)');
+console.log('guard rule tests passed (34 cases)');

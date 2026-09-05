@@ -1,7 +1,7 @@
 import { common } from '@kit.AbilityKit';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { appPicker, guardService } from '@kit.ScreenTimeGuardKit';
-import { buildStrategyName, GuardRule, isRuleScheduleActiveAt } from '../model/GuardRule';
+import { buildStrategyName, GuardRule, isRuleScheduleActiveAt, normalizeAppTokens } from '../model/GuardRule';
 
 const ERROR_STRATEGY_NOT_FOUND: number = 1019000006;
 const ERROR_STRATEGY_NOT_STARTED: number = 1019000008;
@@ -40,21 +40,19 @@ export class ScreenTimeGuardService {
   }
 
   /**
-   * 拉起系统应用选择页并返回目标应用 token。
+   * 拉起系统应用选择页并返回选中的应用 token 数组。
+   * 系统选择页支持勾选多个应用，传入原 token 数组可预勾选已选应用。
    *
-   * @param previousToken 编辑时用于预勾选的原 token，可为空字符串。
-   * @returns 选中的应用 token。
+   * @param previousTokens 编辑时用于预勾选的原 token 数组。
+   * @returns 去重后的选中应用 token 数组，用户未选择时为空数组。
    */
-  public async pickTargetApp(previousToken: string): Promise<string> {
+  public async pickTargetApps(previousTokens: string[]): Promise<string[]> {
     const context: common.UIAbilityContext = this.requireContext();
     await this.requestUserAuth();
     const selected: string[] = await appPicker.startAppPicker(context, {
-      appTokens: previousToken.length > 0 ? [previousToken] : []
+      appTokens: previousTokens.slice()
     });
-    if (selected.length !== 1) {
-      throw new Error('请选择一个要限制的应用');
-    }
-    return selected[0];
+    return normalizeAppTokens(selected);
   }
 
   /**
@@ -84,7 +82,7 @@ export class ScreenTimeGuardService {
     if (isRuleScheduleActiveAt(rule, new Date())) {
       throw new Error('该规则正在生效，本时段内不能停用或删除');
     }
-    const appInfo: guardService.AppInfo = { appTokens: [rule.appToken] };
+    const appInfo: guardService.AppInfo = { appTokens: rule.appTokens.slice() };
     try {
       await guardService.releaseAppsRestriction(appInfo, guardService.RestrictionType.BLOCKLIST_TYPE);
     } catch (error) {
@@ -163,7 +161,7 @@ export class ScreenTimeGuardService {
         repeat: rule.weekdays.slice()
       },
       appInfo: {
-        appTokens: [rule.appToken]
+        appTokens: normalizeAppTokens(rule.appTokens)
       },
       appRestrictionType: guardService.RestrictionType.BLOCKLIST_TYPE
     };

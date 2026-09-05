@@ -1,7 +1,22 @@
 export interface GuardRule {
   id: string;
   name: string;
-  appToken: string;
+  appTokens: string[];
+  weekdays: number[];
+  startTime: string;
+  endTime: string;
+  enabled: boolean;
+}
+
+/**
+ * 本地持久化的历史或当前规则结构。
+ * 旧版本只写 appToken 单值；新版本使用 appTokens 数组，两者均可读取。
+ */
+export interface StoredGuardRule {
+  id: string;
+  name: string;
+  appTokens?: string[];
+  appToken?: string;
   weekdays: number[];
   startTime: string;
   endTime: string;
@@ -9,6 +24,85 @@ export interface GuardRule {
 }
 
 export const WEEKDAY_NAMES: string[] = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+/**
+ * 归一化应用 token 数组：过滤空串并去重，保持首次出现顺序。
+ *
+ * @param values 原始 token 数组。
+ * @returns 去重且不含空串的 token 数组。
+ */
+export function normalizeAppTokens(values: string[]): string[] {
+  const seen: string[] = [];
+  const result: string[] = [];
+  for (const value of values) {
+    const text: string = value.trim();
+    if (text.length > 0 && seen.indexOf(text) === -1) {
+      seen.push(text);
+      result.push(text);
+    }
+  }
+  return result;
+}
+
+/**
+ * 判断两组应用 token 是否等价，忽略顺序与重复项。
+ *
+ * @param left 左侧 token 数组。
+ * @param right 右侧 token 数组。
+ * @returns 归一化且排序后完全一致时返回 true。
+ */
+export function sameAppTokenSet(left: string[], right: string[]): boolean {
+  const sortedLeft: string[] = normalizeAppTokens(left).sort((a: string, b: string): number => {
+    return a < b ? -1 : (a > b ? 1 : 0);
+  });
+  const sortedRight: string[] = normalizeAppTokens(right).sort((a: string, b: string): number => {
+    return a < b ? -1 : (a > b ? 1 : 0);
+  });
+  if (sortedLeft.length !== sortedRight.length) {
+    return false;
+  }
+  for (let index: number = 0; index < sortedLeft.length; index += 1) {
+    if (sortedLeft[index] !== sortedRight[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * 把本地存储的历史结构转换为当前规则结构。
+ * 旧规则只有 appToken 单值时迁移为单元素 appTokens 数组，避免丢失已选应用。
+ *
+ * @param stored 本地存储的规则结构。
+ * @returns 始终包含 appTokens 数组的规则。
+ */
+export function toGuardRule(stored: StoredGuardRule): GuardRule {
+  const storedTokens: string[] = stored.appTokens === undefined ? [] : stored.appTokens;
+  const legacyToken: string = stored.appToken === undefined ? '' : stored.appToken;
+  const appTokens: string[] = normalizeAppTokens(storedTokens.length > 0
+    ? storedTokens
+    : (legacyToken.length > 0 ? [legacyToken] : []));
+  return {
+    id: stored.id,
+    name: stored.name,
+    appTokens,
+    weekdays: stored.weekdays.slice(),
+    startTime: stored.startTime,
+    endTime: stored.endTime,
+    enabled: stored.enabled
+  };
+}
+
+/**
+ * 生成规则卡片的应用数量展示文本。
+ *
+ * @param appTokens 应用 token 数组。
+ * @returns 未选择时提示尚未选择，否则显示受限应用个数。
+ */
+export function formatAppCount(appTokens: string[]): string {
+  const count: number = normalizeAppTokens(appTokens).length;
+  return count > 0 ? `限制 ${count} 个应用` : '尚未选择应用';
+}
 
 /**
  * 归一化星期数组：过滤非法值、去重并升序排序。
@@ -83,7 +177,7 @@ export function validateRule(rule: GuardRule): string {
   if (name.length > 30) {
     return '规则名不能超过 30 个字符';
   }
-  if (rule.appToken.length === 0) {
+  if (normalizeAppTokens(rule.appTokens).length === 0) {
     return '请选择要限制的应用';
   }
   const weekdays: number[] = normalizeWeekdays(rule.weekdays);

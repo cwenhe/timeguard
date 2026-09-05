@@ -5,6 +5,7 @@ import {
   isRuleActiveAt,
   isRuleScheduleActiveAt,
   normalizeWeekdays,
+  sameAppTokenSet,
   validateRule,
   WEEKDAY_NAMES
 } from '../model/GuardRule';
@@ -18,8 +19,7 @@ const WEEKDAY_OPTIONS: number[] = [1, 2, 3, 4, 5, 6, 7];
 struct RuleEditPage {
   @State private ruleId: string = '';
   @State private ruleName: string = '';
-  @State private appToken: string = '';
-  @State private appText: string = '尚未选择应用';
+  @State private appTokens: string[] = [];
   @State private weekdays: number[] = [1, 2, 3, 4, 5, 6, 7];
   @State private startTime: string = '19:00';
   @State private endTime: string = '21:00';
@@ -103,8 +103,7 @@ struct RuleEditPage {
     }
     this.existingRule = rule;
     this.ruleName = rule.name;
-    this.appToken = rule.appToken;
-    this.appText = '已选择应用（编辑时重新打开选择页可查看）';
+    this.appTokens = rule.appTokens.slice();
     this.weekdays = rule.weekdays.slice();
     this.startTime = rule.startTime;
     this.endTime = rule.endTime;
@@ -116,10 +115,13 @@ struct RuleEditPage {
     }
     this.busy = true;
     try {
-      const token: string = await this.guardService.pickTargetApp(this.appToken);
-      this.appToken = token;
-      this.appText = '已选择 1 个应用';
-      this.showStatus('idle', '应用已选择');
+      const tokens: string[] = await this.guardService.pickTargetApps(this.appTokens);
+      this.appTokens = tokens;
+      if (tokens.length > 0) {
+        this.showStatus('idle', `已选择 ${tokens.length} 个应用`);
+      } else {
+        this.showStatus('error', '尚未选择要限制的应用');
+      }
     } catch (error) {
       this.showStatus('error', `选择应用失败：${this.guardService.describeError(error as BusinessError)}`);
     } finally {
@@ -150,7 +152,7 @@ struct RuleEditPage {
     const candidate: GuardRule = {
       id,
       name: this.ruleName,
-      appToken: this.appToken,
+      appTokens: this.appTokens.slice(),
       weekdays: this.weekdays.slice(),
       startTime: this.startTime,
       endTime: this.endTime,
@@ -201,7 +203,8 @@ struct RuleEditPage {
     this.busy = true;
     try {
       if (candidate.enabled) {
-        if (this.existingRule !== null && this.existingRule.enabled && this.existingRule.appToken !== candidate.appToken) {
+        if (this.existingRule !== null && this.existingRule.enabled &&
+          !sameAppTokenSet(this.existingRule.appTokens, candidate.appTokens)) {
           await this.guardService.deactivateRule(this.existingRule);
         }
         await this.guardService.applyRule(candidate);
@@ -369,7 +372,7 @@ struct RuleEditPage {
             this.editEndTime();
           })
 
-          Button(this.appToken.length > 0 ? '重新选择要限制的应用' : '选择要限制的应用')
+          Button(this.appTokens.length > 0 ? '重新选择要限制的应用' : '选择要限制的应用')
             .width('100%')
             .height(48)
             .fontSize(15)
@@ -380,7 +383,9 @@ struct RuleEditPage {
               void this.chooseApp();
             })
 
-          Text(this.appText)
+          Text(this.appTokens.length > 0
+            ? `已选择 ${this.appTokens.length} 个应用（打开系统选择页可查看名单）`
+            : '尚未选择应用')
             .fontSize(13)
             .fontColor('#64748B')
 

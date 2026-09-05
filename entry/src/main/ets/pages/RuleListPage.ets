@@ -1,6 +1,13 @@
 import { router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
-import { formatRuleTime, formatWeekdays, GuardRule, isRuleActiveAt, isRuleScheduleActiveAt } from '../model/GuardRule';
+import {
+  formatAppCount,
+  formatRuleTime,
+  formatWeekdays,
+  GuardRule,
+  isRuleActiveAt,
+  isRuleScheduleActiveAt
+} from '../model/GuardRule';
 import { ScreenTimeGuardService } from '../service/ScreenTimeGuardService';
 import { GuardRuleRepository } from '../storage/GuardRuleRepository';
 
@@ -221,7 +228,7 @@ struct RuleListPage {
     return {
       id: rule.id,
       name: rule.name,
-      appToken: rule.appToken,
+      appTokens: rule.appTokens.slice(),
       weekdays: rule.weekdays.slice(),
       startTime: rule.startTime,
       endTime: rule.endTime,
@@ -274,6 +281,9 @@ struct RuleListPage {
                     .fontSize(17)
                     .fontWeight(FontWeight.Medium)
                     .fontColor('#0F172A')
+                  Text(formatAppCount(rule.appTokens))
+                    .fontSize(13)
+                    .fontColor('#64748B')
                   Text(`${formatWeekdays(rule.weekdays)} ${formatRuleTime(rule)}`)
                     .fontSize(13)
                     .fontColor('#64748B')
