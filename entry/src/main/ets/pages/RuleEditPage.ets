@@ -1,4 +1,4 @@
-import { LengthMetrics, router } from '@kit.ArkUI';
+import { LengthMetrics } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import {
   GuardRule,
@@ -36,7 +36,7 @@ struct RuleEditPage {
    * 页面出现时根据路由参数加载已有规则或进入新增状态。
    */
   public aboutToAppear(): void {
-    const params = router.getParams() as Record<string, string>;
+    const params = this.getUIContext().getRouter().getParams() as Record<string, string>;
     const id: string = params !== null && params !== undefined && params['ruleId'] !== undefined
       ? params['ruleId']
       : '';
@@ -57,13 +57,13 @@ struct RuleEditPage {
   }
 
   /**
-   * 启动定时刷新当前时间，让编辑页能自动进入/退出生效锁定状态。
+   * 每秒刷新当前时间，让编辑页能及时自动进入/退出生效锁定状态。
    */
   private startTick(): void {
     this.stopTick();
     this.timerId = setInterval(() => {
       this.now = new Date();
-    }, 30000);
+    }, 1000);
   }
 
   /**
@@ -210,7 +210,7 @@ struct RuleEditPage {
         await this.guardService.applyRule(candidate);
       }
       await this.repository.saveRule(candidate);
-      router.back();
+      this.getUIContext().getRouter().back();
     } catch (error) {
       this.showStatus('error', `保存失败：${this.guardService.describeError(error as BusinessError)}`);
     } finally {
@@ -277,11 +277,11 @@ struct RuleEditPage {
           .fontWeight(FontWeight.Bold)
           .fontColor('#0F172A')
         Blank()
-        Text('返回')
+      Text('返回')
           .fontSize(15)
           .fontColor('#1D4ED8')
           .onClick(() => {
-            router.back();
+            this.getUIContext().getRouter().back();
           })
       }
       .width('100%')

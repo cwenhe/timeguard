@@ -1,4 +1,3 @@
-import { router } from '@kit.ArkUI';
 import { BusinessError } from '@kit.BasicServicesKit';
 import {
   formatAppCount,
@@ -39,13 +38,13 @@ struct RuleListPage {
   }
 
   /**
-   * 启动定时刷新当前时间，让“限制生效中”状态能随规则时间窗自动变化。
+   * 每秒刷新当前时间，让“限制生效中”状态能随规则时间窗及时自动变化。
    */
   private startTick(): void {
     this.stopTick();
     this.timerId = setInterval(() => {
       this.now = new Date();
-    }, 30000);
+    }, 1000);
   }
 
   /**
@@ -98,18 +97,31 @@ struct RuleListPage {
   }
 
   private openCreatePage(): void {
-    void router.pushUrl({ url: 'pages/RuleEditPage' });
+    this.getUIContext().getRouter().pushUrl({ url: 'pages/RuleEditPage' }).catch((error: BusinessError) => {
+      this.showStatus('error', `打开添加页失败：${error.code} ${error.message}`);
+    });
   }
 
   private openEditPage(ruleId: string): void {
     const target: GuardRule | undefined = this.rules.find((item: GuardRule): boolean => item.id === ruleId);
+    this.showStatus('idle', `正在打开“${target === undefined ? '规则' : target.name}”的编辑页…`);
     if (target !== undefined && this.isRuleActiveNow(target)) {
-      this.showStatus('error', `“${target.name}”正在生效，本时段内不能编辑`);
+      AlertDialog.show({
+        title: '规则正在生效',
+        message: `“${target.name}”本时段内不能编辑，结束后自动解除。`,
+        confirm: {
+          value: '知道了',
+          action: () => {
+          }
+        }
+      });
       return;
     }
-    void router.pushUrl({
+    this.getUIContext().getRouter().pushUrl({
       url: 'pages/RuleEditPage',
       params: { ruleId }
+    }).catch((error: BusinessError) => {
+      this.showStatus('error', `打开编辑页失败：${error.code} ${error.message}`);
     });
   }
 
