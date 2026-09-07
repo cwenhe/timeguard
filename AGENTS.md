@@ -2,7 +2,7 @@
 
 ## 项目边界
 
-- 本仓库是 HarmonyOS 6.1/API 23 的 ArkTS + ArkUI Stage 工程，包名 `com.cwenhe.timeguard`，桌面显示名“自控钟”。
+- 本仓库是 HarmonyOS 6.1.1/API 24 的 ArkTS + ArkUI Stage 工程，包名 `com.cwenhe.timeguard`，桌面显示名“自控钟”。
 - 与 `timefence-harmony`、`timefence-android` 相互独立。
 - 第一版只使用 Screen Time Guard Kit 原生“周几 + 当天起止时间”能力，不实现交易日历、跨天时段和悬浮窗。
 

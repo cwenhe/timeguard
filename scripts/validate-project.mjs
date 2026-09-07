@@ -38,7 +38,7 @@ function validateProject() {
   const syscapConfig = parseConfig('entry/src/main/syscap.json');
 
   assert.equal(appConfig.app.bundleName, 'com.cwenhe.timeguard');
-  assert.equal(buildConfig.app.products[0].targetSdkVersion, '6.1.0(23)');
+  assert.equal(buildConfig.app.products[0].targetSdkVersion, '6.1.1(24)');
   assert.equal(moduleConfig.module.mainElement, 'EntryAbility');
   assert.ok(moduleConfig.module.requestPermissions.some(
     (item) => item.name === 'ohos.permission.MANAGE_SCREEN_TIME_GUARD'
@@ -60,6 +60,7 @@ function validateProject() {
   assert.match(model, /toGuardRule/);
   assert.match(model, /formatAppCount/);
   assert.match(service, /requestUserAuth/);
+  assert.match(service, /isSupportAppUninstall/);
   assert.match(service, /startAppPicker/);
   assert.match(service, /pickTargetApps/);
   assert.match(service, /addGuardStrategy/);

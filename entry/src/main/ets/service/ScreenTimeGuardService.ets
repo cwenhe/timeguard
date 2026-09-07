@@ -33,10 +33,11 @@ export class ScreenTimeGuardService {
 
   /**
    * 请求用户授权 Screen Time Guard 管控能力。
+   * 授权时声明策略生效期间禁止卸载自控钟，避免用户通过卸载绕过限制。
    */
   public async requestUserAuth(): Promise<void> {
     const context: common.UIAbilityContext = this.requireContext();
-    await guardService.requestUserAuth(context);
+    await guardService.requestUserAuth(context, { isSupportAppUninstall: false });
   }
 
   /**
@@ -139,6 +140,8 @@ export class ScreenTimeGuardService {
         return '守护策略正在执行，已先停止再更新';
       case 1019000008:
         return '守护策略尚未启动';
+      case 1019000010:
+        return '当前系统版本不支持防卸载授权配置，请升级到 HarmonyOS 6.1.1 及以上';
       default:
         return error.message !== undefined && error.message.length > 0 ? error.message : String(error);
     }
