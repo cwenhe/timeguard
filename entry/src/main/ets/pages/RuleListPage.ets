@@ -18,7 +18,9 @@ struct RuleListPage {
   @State private busy: boolean = false;
   @State private statusText: string = '正在同步规则…';
   @State private statusColor: string = '#64748B';
+  @State private renderVersion: number = 0;
   private timerId: number = -1;
+  private routeTimerId: number = -1;
   private readonly repository: GuardRuleRepository = GuardRuleRepository.getInstance();
   private readonly guardService: ScreenTimeGuardService = ScreenTimeGuardService.getInstance();
 
@@ -35,6 +37,7 @@ struct RuleListPage {
    */
   public onPageHide(): void {
     this.stopTick();
+    this.stopRouteWatch();
   }
 
   /**
@@ -55,6 +58,34 @@ struct RuleListPage {
       clearInterval(this.timerId);
       this.timerId = -1;
     }
+  }
+
+  /**
+   * 启动编辑跳转看门狗：超过 2.5 秒仍未切换页面时在界面显示错误。
+   */
+  private startRouteWatch(): void {
+    this.stopRouteWatch();
+    this.routeTimerId = setTimeout(() => {
+      this.routeTimerId = -1;
+      this.showStatus('error', '路由未完成：仍停留在列表页，请截图反馈此提示');
+    }, 2500);
+  }
+
+  /**
+   * 取消编辑跳转看门狗定时器。
+   */
+  private stopRouteWatch(): void {
+    if (this.routeTimerId >= 0) {
+      clearTimeout(this.routeTimerId);
+      this.routeTimerId = -1;
+    }
+  }
+
+  /**
+   * 递增渲染版本号，强制 ForEach 按最新规则内容重建列表项。
+   */
+  private bumpRender(): void {
+    this.renderVersion += 1;
   }
 
   /**
@@ -88,6 +119,7 @@ struct RuleListPage {
         }
       }
       this.rules = localRules;
+      this.bumpRender();
       this.showStatus('idle', localRules.length === 0 ? '还没有规则，点击下方“添加规则”开始' : '规则已同步');
     } catch (error) {
       this.showStatus('error', `读取本地规则失败：${String(error)}`);
@@ -117,12 +149,21 @@ struct RuleListPage {
       });
       return;
     }
-    this.getUIContext().getRouter().pushUrl({
-      url: 'pages/RuleEditPage',
-      params: { ruleId }
-    }).catch((error: BusinessError) => {
-      this.showStatus('error', `打开编辑页失败：${error.code} ${error.message}`);
-    });
+    this.startRouteWatch();
+    try {
+      this.getUIContext().getRouter().pushUrl({
+        url: 'pages/RuleEditPage',
+        params: { ruleId }
+      }).then(() => {
+        this.stopRouteWatch();
+      }).catch((error: BusinessError) => {
+        this.stopRouteWatch();
+        this.showStatus('error', `打开编辑页失败：${error.code} ${error.message}`);
+      });
+    } catch (error) {
+      this.stopRouteWatch();
+      this.showStatus('error', `打开编辑页异常：${String(error)}`);
+    }
   }
 
   /**
@@ -228,6 +269,7 @@ struct RuleListPage {
       }
       await this.repository.deleteRule(rule.id);
       this.rules = this.rules.filter((item: GuardRule): boolean => item.id !== rule.id);
+      this.bumpRender();
       this.showStatus('idle', `已删除“${rule.name}”`);
     } catch (error) {
       this.showStatus('error', `删除失败：${this.guardService.describeError(error as BusinessError)}`);
@@ -262,6 +304,7 @@ struct RuleListPage {
       next.push(updated);
     }
     this.rules = next;
+    this.bumpRender();
   }
 
   build() {
@@ -341,7 +384,7 @@ struct RuleListPage {
             .borderRadius(16)
             .width('100%')
           }
-        }, (rule: GuardRule) => rule.id)
+        }, (rule: GuardRule) => `${rule.id}_${rule.enabled}_${this.renderVersion}`)
       }
       .layoutWeight(1)
       .width('100%')
